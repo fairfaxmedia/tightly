@@ -1,0 +1,20 @@
+{
+  "name": "sightly-exploration",
+  "version": "0.1.0",
+  "authors": [
+    "Jason Darwin <jason.darwin@fairfaxmedia.co.nz>"
+  ],
+  "license": "Fairfax Media NZ proprietary",
+  "ignore": [
+    "**/.*",
+    "node_modules",
+    "bower_components",
+    "test",
+    "tests"
+  ],
+  "dependencies": {
+    "tim": "git+https://github.com/premasagar/tim.git",
+    "jquery": "~2.1.4",
+    "jasmine": "~2.3.4"
+  }
+}
