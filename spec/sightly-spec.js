@@ -7,7 +7,7 @@ describe("Our template engine", function() {
     var data = {
         msg: 'cool',
         wcmmode: {
-            edit: 'false',
+            edit: false,
             display: 'stuff'
         }
     };
@@ -45,7 +45,7 @@ describe("Our template engine", function() {
         */}).toString().match(/[^]*\/\*([^]*)\*\/\}$/)[1];
 
         var mockAfter = (function() {/*
-            <p data-sly-test="true">This is cool stuff</p>
+            <p data-sly-test="stuff">This is cool stuff</p>
         */}).toString().match(/[^]*\/\*([^]*)\*\/\}$/)[1];
 
         expect(tim(mockBefore, data)).toBe(mockAfter);
@@ -54,7 +54,7 @@ describe("Our template engine", function() {
     it ("should allow interpolation of simple 'and' conditional attribute templates, e.g. '<p data-sly-test=\"${wcmmode.edit && wcmmode.display}\">This is ${msg} stuff</p>'", function() {
 
         var mockBefore = (function() {/*
-            <p data-sly-test="${wcmmode.edit && wcmmode.display}">This is ${msg} stuff</p>
+            <p data-sly-test="${wcmmode.display && wcmmode.edit}">This is ${msg} stuff</p>
         */}).toString().match(/[^]*\/\*([^]*)\*\/\}$/)[1];
 
         var mockAfter = (function() {/*
@@ -76,5 +76,19 @@ describe("Our template engine", function() {
 
         expect(tim(mockBefore, data)).toBe(mockAfter);
     });
+
+    it ("should allow interpolation of complex conditional attribute templates, e.g. '<p data-sly-test=\"${wcmmode.edit && wcmmode.display || !wcmmode.edit}\">This is ${msg} stuff</p>'", function() {
+
+        var mockBefore = (function() {/*
+            <p data-sly-test="${wcmmode.edit && wcmmode.display || !wcmmode.edit}">This is ${msg} stuff</p>
+        */}).toString().match(/[^]*\/\*([^]*)\*\/\}$/)[1];
+
+        var mockAfter = (function() {/*
+            <p data-sly-test="true">This is cool stuff</p>
+        */}).toString().match(/[^]*\/\*([^]*)\*\/\}$/)[1];
+
+        expect(tim(mockBefore, data)).toBe(mockAfter);
+    });
+
 
 });

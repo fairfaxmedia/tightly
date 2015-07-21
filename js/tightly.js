@@ -43,18 +43,19 @@
         "use strict";
 
         var patterns = {
-            word: "[a-z0-9_]",
+            word: "[\\w\\.]+",
             dot : "\\.",
             or  : "\\s*\\|\\|\\s",
             and : "\\s*&&\\s",
-            not : "![a-z0-9_]"
+            not : "!",
+            operator: "!|\\+|-"
         }
 
         var settings = {
                 start: "{{",
                 end  : "}}",
                 // path : "[a-z0-9_$][\\.a-z0-9_]*" // e.g. config.person.name
-                path : "(" + patterns.word + "|" + patterns.not + "|" + patterns.dot + "|" + patterns.or + "|" + patterns.and + ")*" // e.g. config.person.name
+                path : ".*?"
             },
             templates = {},
             filters = {},
@@ -225,17 +226,41 @@
                 return applyFilter("token", token, data, template);
             });
         */
-        // TODO: all an array to be passed to tim(), so that the template is called for each element in it
         function substitute(template, data){
-            var match, tag, token, substituted, startPos, endPos, templateStart, templateEnd, subTemplate, closeToken, closePos, key, loopData, loop;
+            var match, tag, matched, tokens, token, substituted, startPos, endPos, templateStart, templateEnd, subTemplate, closeToken, closePos, key, loopData, loop;
+
+            // Our token may include conditionals, e.g. ${wcmmode.edit || wcmmode.display} so
+            // split into sub-tokens and evaluate.
+            // We'll use eval to evaluate the expressions, but we could possibly also
+            // use an expression parser such as http://jsep.from.so/
+            var re = new RegExp('^(' + patterns.operator + ')?(' + patterns.word + ')+(' + patterns.operator + ')?$');
 
             while((match = pattern.exec(template)) !== null) {
-                token = match[1];
-                substituted = applyFilter("token", token, data, template);
+            	matched = match[1];
                 startPos = match.index;
                 endPos = pattern.lastIndex;
                 templateStart = template.slice(0, startPos);
                 templateEnd = template.slice(endPos);
+
+            	tokens = matched.match(/([^\s]+)/g);
+            	tokens = tokens.map(function(token){
+
+            		// Ensure we've got an word and not an operator
+            		if (re.test(token)) {
+
+	            		// Deal with prefix / postfix operators, e.g. !stuff++
+	            		var matches = re.exec(token);
+	            		var prefix = (typeof matches[1] == 'undefined' ? '' : matches[1]);
+	            		var token = matches[2];
+	            		var suffix = (typeof matches[3] == 'undefined' ? '' : matches[3]);
+
+		                return prefix + JSON.stringify(applyFilter("token", token, data, template)) + suffix;
+            		} else {
+            			return token;
+            		}
+            	});
+
+            	substituted = eval(tokens.join(' '));
 
                 // If the final value is a function call it and use the returned
                 // value in its place.
@@ -243,7 +268,8 @@
                     substituted = substituted.call(data);
                 }
 
-                if (typeof substituted !== "boolean" && typeof substituted !== "object"){
+                //if (typeof substituted !== "boolean" && typeof substituted !== "object"){
+                if (typeof substituted !== "object"){
                     template = templateStart + substituted + templateEnd;
                 } else {
                     subTemplate = "";
@@ -276,6 +302,7 @@
                 }
 
                 pattern.lastIndex = 0;
+
             }
             return template;
         }
@@ -323,129 +350,29 @@
         // Add new filters and trigger existing ones. Use tim.filter.stop() during processing, if required.
         tim.filter = filter;
 
-
-        /////
-
-
         // dotSyntax default plugin: uses dot syntax to parse a data object for substitutions
         addFilter("token", function(token, data, tag){
 
-            // Our token may include conditionals, e.g. ${wcmmode.edit || wcmmode.display}
-            // Split into sub-tokens and evaluate.
-            // For the time being we'll limit ourselves to simple / single conditionals, but if
-            // we want to support more complicated expressions, we'll probably need to us an
-            // expression parser such as http://jsep.from.so/
+            var path = token.split("."),
+                len = path.length,
+                dataLookup = data,
+                i = 0;
 
-            var tokens = [];
+            for (; i < len; i++){
+                dataLookup = dataLookup[path[i]];
 
-            // a || conditional, e.g. ${wcmmode.edit || wcmmode.display}
-            var re = new RegExp(patterns.or);
-            if (re.test(token)) {
-                tokens = token.split(re);
-                var lookedup = lookup(tokens).reduce(function(prev, curr){
-                    return JSON.parse(prev) || JSON.parse(curr);
-                });
-                return JSON.stringify(lookedup);
-            }
+                // Property not found
+                if (dataLookup === undef){
+                    throw "tim: '" + path[i] + "' not found" + (i ? " in " + tag : "");
+                }
 
-            // a && conditional, e.g. ${wcmmode.edit && wcmmode.display}
-            re = new RegExp(patterns.and);
-            if (re.test(token)) {
-                tokens = token.split(re);
-                var lookedup = lookup(tokens).reduce(function(prev, curr){
-                    return JSON.parse(prev) && JSON.parse(curr);
-                });
-                return JSON.stringify(lookedup);
-            }
-
-            // a negated simple token, e.g. ${!wcmmode.edit}
-            re = new RegExp(patterns.not);
-            if (re.test(token)) {
-                tokens = token.split('!');
-                tokens.shift();
-                var lookedup = lookup(tokens).join('');
-
-                if (lookedup === 'false' || '') {
-                    return 'true';
-                } else {
-                    return 'false';
+                // Return the required value
+                if (i === len - 1){
+                    return dataLookup;
                 }
             }
-
-            // a simple token, e.g. ${wcmmode.edit}
-            tokens.push(token);
-            return lookup(tokens).join('');
-
-            function lookup(tokens) {
-                var lookups = tokens.map(function(token){
-                    var path = token.split("."),
-                        len = path.length,
-                        dataLookup = data,
-                        i = 0;
-
-                    for (; i < len; i++){
-                        dataLookup = dataLookup[path[i]];
-
-                        // Property not found
-                        if (dataLookup === undef){
-                            throw "tim: '" + path[i] + "' not found" + (i ? " in " + tag : "");
-                        }
-
-                        // Return the required value
-                        if (i === len - 1){
-                            return dataLookup;
-                        }
-                    }
-                });
-
-                return lookups;
-            }
-
 
         });
-
-
-        /////
-
-
-        // Dom plugin: finds micro-templates in <script>'s in the DOM
-        // This block of code can be removed if unneeded - e.g. with server-side JS
-        // Default: <script type="text/tim" class="foo">{{TEMPLATE}}</script>
-        if (window && window.document){
-            tim.dom = function(domSettings){
-                domSettings = domSettings || {};
-
-                var type = domSettings.type || settings.type || "text/tim",
-                    attr = domSettings.attr || settings.attr || "class",
-                    document = window.document,
-                    hasQuery = !!document.querySelectorAll,
-                    elements = hasQuery ?
-                        document.querySelectorAll(
-                            "script[type='" + type + "']"
-                        ) :
-                        document.getElementsByTagName("script"),
-                    i = 0,
-                    len = elements.length,
-                    elem, key,
-                    templatesInDom = {};
-
-                for (; i < len; i++){
-                    elem = elements[i];
-                    // Cannot access "class" using el.getAttribute()
-                    key = attr === "class" ? elem.className : elem.getAttribute(attr);
-                    if (key && (hasQuery || elem.type === type)){
-                        templatesInDom[key] = elem.innerHTML;
-                    }
-                }
-
-                templatesCache(templatesInDom);
-                return templatesInDom;
-            };
-
-            addFilter("init", function(){
-                tim.dom();
-            });
-        }
 
         return tim;
     }());
