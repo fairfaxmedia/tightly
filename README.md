@@ -18,9 +18,9 @@ Given a properly populated data object (more detail below), `tightly` can be cal
     var find = '<p data-sly-text="${msg}">TEXT TO BE REPLACED</p>';
     var target = '<div><p data-sly-text="cool">cool</p></div>';
 
-    target == tightly(template, find, data)
+    target === tightly(template, find, data)
 
-    // i.e. the tighly call will return the following:
+    // i.e. the tightly call will return the following:
     // <div><p data-sly-text="cool">cool</p></div>
 
 ## Why is this needed?
