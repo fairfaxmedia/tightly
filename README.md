@@ -4,12 +4,31 @@
 
 This is a tool for populating [sightly](http://blogs.adobe.com/experiencedelivers/experience-management/sightly-intro-part-1/) templates with dummy data via JavaScript.
 
+It's rather simple, in that it simply looks for a sightly-templated string as directed
+and replaces it with a string containing the values that sightly could have
+populated.
+
+Given a properly populated data object (more detail below), `tightly` can be called as follows:
+
+    var data = {
+        '<p data-sly-text="${msg}">TEXT TO BE REPLACED</p>' : '<p data-sly-text="cool">cool</p>'
+    }
+
+    var template = '<div><p data-sly-text="${msg}">TEXT TO BE REPLACED</p></div>';
+    var find = '<p data-sly-text="${msg}">TEXT TO BE REPLACED</p>';
+    var target = '<div><p data-sly-text="cool">cool</p></div>';
+
+    target == tightly(template, find, data)
+
+    // i.e. the tighly call will return the following:
+    // <div><p data-sly-text="cool">cool</p></div>
+
 ## Why is this needed?
 
 We need a mechanism to load sightly templates with data when they are not served
 in a CQ environment.
 
-This allows us to demonstrate the template, filled with exmaple data, in non-CQ
+This allows us to demonstrate the template, filled with example data, in non-CQ
 contexts such as the pattern library.
 
 ## Usage
