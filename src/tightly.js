@@ -13,7 +13,7 @@
     }
 })('tightly', function() {
 
-    var tightly = (function createTightly(initSettings){
+    var tightly = (function createTightly(){
         "use strict";
 
         function tightly(template, find, data){
