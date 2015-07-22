@@ -1,94 +1,124 @@
-describe("Our template engine", function() {
+describe("Tightly", function() {
     "use strict";
 
-    tim.settings({start: '\\${'});
-    tim.settings({end: '}'});
-
     var data = {
-        msg: 'cool',
-        wcmmode: {
-            edit: false,
-            display: 'stuff'
-        }
+        '<p data-sly-text="${msg}">TEXT TO BE REPLACED</p>':
+        (function() {/*
+            <p data-sly-text="cool">cool</p>
+        */}).toString().match(/[^]*\/\*([^]*)\*\/\}$/)[1],
+
+        'data-sly-text="${msg}"':
+        (function() {/*
+            data-sly-text="cool"
+        */}).toString().match(/[^]*\/\*([^]*)\*\/\}$/)[1],
+
+        /*
+            <ul data-sly-list.child='${currentPage.listChildren}'>
+              <li>${child.title}</li>
+            </ul>
+        */
+        'CiAgICAgICAgICAgIDx1bCBkYXRhLXNseS1saXN0LmNoaWxkPScke2N1cnJlbnRQYWdlLmxpc3RDaGlsZHJlbn0nPgogICAgICAgICAgICAgIDxsaT4ke2NoaWxkLnRpdGxlfTwvbGk+CiAgICAgICAgICAgIDwvdWw+CiAgICAgICAg':
+        (function() {/*
+            <ul data-sly-list.child='[{"title":"Title 1"},{"title":"Title 2"},{"title":"Title 3"}]'>
+              <li>Title 1</li>
+              <li>Title 2</li>
+              <li>Title 3</li>
+            </ul>
+        */}).toString().match(/[^]*\/\*([^]*)\*\/\}$/)[1],
+
+        /*
+                <ul data-sly-list.child='${currentPage.listChildren}'>
+                  <li>${child.title}</li>
+                </ul>
+        */
+        'CiAgICAgICAgICAgICAgICA8dWwgZGF0YS1zbHktbGlzdC5jaGlsZD0nJHtjdXJyZW50UGFnZS5saXN0Q2hpbGRyZW59Jz4KICAgICAgICAgICAgICAgICAgPGxpPiR7Y2hpbGQudGl0bGV9PC9saT4KICAgICAgICAgICAgICAgIDwvdWw+CiAgICAgICAg':
+        (function() {/*
+                <ul data-sly-list.child='[{"title":"Title 1"},{"title":"Title 2"},{"title":"Title 3"}]'>
+                  <li>Title 1</li>
+                  <li>Title 2</li>
+                  <li>Title 3</li>
+                </ul>
+        */}).toString().match(/[^]*\/\*([^]*)\*\/\}$/)[1]
     };
 
-    it ("should allow interpolation of template variables, e.g. '<p>This is ${msg} stuff</p>'", function() {
+    it ("should allow replacement of a string within a single-line template, where the string is the entire template", function() {
 
-        var mockBefore = (function() {/*
-            <p>This is ${msg} stuff</p>
+        var find = (function() {/*
+            <p data-sly-text="${msg}">TEXT TO BE REPLACED</p>
         */}).toString().match(/[^]*\/\*([^]*)\*\/\}$/)[1];
 
-        var mockAfter = (function() {/*
-            <p>This is cool stuff</p>
+        var target = (function() {/*
+            <p data-sly-text="cool">cool</p>
         */}).toString().match(/[^]*\/\*([^]*)\*\/\}$/)[1];
 
-        expect(tim(mockBefore, data)).toBe(mockAfter);
+        expect(tightly(find, find, data)).toBe(target);
     });
 
-    it ("should allow interpolation of attribute templates, e.g. '<p data-sly-test=\"${wcmmode.display}\">'", function() {
+    it ("should allow replacement of a string within a single-line template, where the string is not the entire template", function() {
 
-        var mockBefore = (function() {/*
-            <p data-sly-test="${wcmmode.display}">
+        var template = (function() {/*
+            <p data-sly-text="${msg}">MY NEW TEXT</p>
         */}).toString().match(/[^]*\/\*([^]*)\*\/\}$/)[1];
 
-        var mockAfter = (function() {/*
-            <p data-sly-test="stuff">
+        var find = (function() {/*
+            data-sly-text="${msg}"
         */}).toString().match(/[^]*\/\*([^]*)\*\/\}$/)[1];
 
-        expect(tim(mockBefore, data)).toBe(mockAfter);
+        var target = (function() {/*
+            <p data-sly-text="cool">MY NEW TEXT</p>
+        */}).toString().match(/[^]*\/\*([^]*)\*\/\}$/)[1];
+
+        expect(tightly(template, find, data)).toBe(target);
     });
 
-    it ("should allow interpolation of simple 'or' conditional attribute templates, e.g. '<p data-sly-test=\"${wcmmode.edit || wcmmode.display}\">'", function() {
+    it ("should allow replacement of a string within a multi-line template, where the string is the entire template", function() {
 
-        var mockBefore = (function() {/*
-            <p data-sly-test="${wcmmode.edit || wcmmode.display}">
+        var find = (function() {/*
+            <ul data-sly-list.child='${currentPage.listChildren}'>
+              <li>${child.title}</li>
+            </ul>
         */}).toString().match(/[^]*\/\*([^]*)\*\/\}$/)[1];
 
-        var mockAfter = (function() {/*
-            <p data-sly-test="stuff">
+        var target = (function() {/*
+            <ul data-sly-list.child='[{"title":"Title 1"},{"title":"Title 2"},{"title":"Title 3"}]'>
+              <li>Title 1</li>
+              <li>Title 2</li>
+              <li>Title 3</li>
+            </ul>
         */}).toString().match(/[^]*\/\*([^]*)\*\/\}$/)[1];
 
-        expect(tim(mockBefore, data)).toBe(mockAfter);
+        expect(tightly(find, find, data)).toBe(target);
     });
 
-    it ("should allow interpolation of simple 'and' conditional attribute templates, e.g. '<p data-sly-test=\"${wcmmode.edit && wcmmode.display}\">'", function() {
+    it ("should allow replacement of a string within a multi-line template, where the string is not the entire template", function() {
 
-        var mockBefore = (function() {/*
-            <p data-sly-test="${wcmmode.display && wcmmode.edit}">
+        var template = (function() {/*
+            <div>
+                <ul data-sly-list.child='${currentPage.listChildren}'>
+                  <li>${child.title}</li>
+                </ul>
+            </div>
         */}).toString().match(/[^]*\/\*([^]*)\*\/\}$/)[1];
 
-        var mockAfter = (function() {/*
-            <p data-sly-test="false">
+        var find = (function() {/*
+                <ul data-sly-list.child='${currentPage.listChildren}'>
+                  <li>${child.title}</li>
+                </ul>
         */}).toString().match(/[^]*\/\*([^]*)\*\/\}$/)[1];
 
-        expect(tim(mockBefore, data)).toBe(mockAfter);
+//console.log(window.btoa(find));
+
+        var target = (function() {/*
+            <div>
+                <ul data-sly-list.child='[{"title":"Title 1"},{"title":"Title 2"},{"title":"Title 3"}]'>
+                  <li>Title 1</li>
+                  <li>Title 2</li>
+                  <li>Title 3</li>
+                </ul>
+            </div>
+        */}).toString().match(/[^]*\/\*([^]*)\*\/\}$/)[1];
+
+        expect(tightly(template, find, data)).toBe(target);
     });
-
-    it ("should allow interpolation of simple '!' conditional attribute templates, e.g. '<p data-sly-test=\"${!wcmmode.edit}\">'", function() {
-
-        var mockBefore = (function() {/*
-            <p data-sly-test="${!wcmmode.edit}">
-        */}).toString().match(/[^]*\/\*([^]*)\*\/\}$/)[1];
-
-        var mockAfter = (function() {/*
-            <p data-sly-test="true">
-        */}).toString().match(/[^]*\/\*([^]*)\*\/\}$/)[1];
-
-        expect(tim(mockBefore, data)).toBe(mockAfter);
-    });
-
-    it ("should allow interpolation of complex conditional attribute templates, e.g. '<p data-sly-test=\"${wcmmode.edit && wcmmode.display || !wcmmode.edit}\">'", function() {
-
-        var mockBefore = (function() {/*
-            <p data-sly-test="${wcmmode.edit && wcmmode.display || !wcmmode.edit}">
-        */}).toString().match(/[^]*\/\*([^]*)\*\/\}$/)[1];
-
-        var mockAfter = (function() {/*
-            <p data-sly-test="true">
-        */}).toString().match(/[^]*\/\*([^]*)\*\/\}$/)[1];
-
-        expect(tim(mockBefore, data)).toBe(mockAfter);
-    });
-
 
 });

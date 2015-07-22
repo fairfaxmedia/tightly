@@ -41,25 +41,37 @@
 
     var tim = (function createTim(initSettings){
         "use strict";
-        
+
+        var patterns = {
+            word: "[\\w\\.]+",
+            dot : "\\.",
+            or  : "\\s*\\|\\|\\s",
+            and : "\\s*&&\\s",
+            not : "!",
+            operator: "!|\\+|-"
+        }
+
         var settings = {
                 start: "{{",
                 end  : "}}",
-                path : "[a-z0-9_$][\\.a-z0-9_]*" // e.g. config.person.name
+                // path : "[a-z0-9_$][\\.a-z0-9_]*" // e.g. config.person.name
+                path : ".*?"
             },
             templates = {},
             filters = {},
             stopThisFilter, pattern, initialized, undef;
-            
-            
+
+        // Our array of interploted data, keyed by template
+        var localData = {};
+
         /////
-        
+
 
         // Update cached regex pattern
         function patternCache(){
             pattern = new RegExp(settings.start + "\\s*("+ settings.path +")\\s*" + settings.end, "gi");
         }
-        
+
         // settingsCache: Get and set settings
         /*
             Example usage:
@@ -68,7 +80,7 @@
         */
         function settingsCache(newSettings){
             var s;
-        
+
             if (newSettings){
                 for (s in newSettings){
                     if (newSettings.hasOwnProperty(s)){
@@ -79,7 +91,7 @@
             }
             return settings;
         }
-            
+
         // Apply custom settings
         if (initSettings){
             settingsCache(initSettings);
@@ -87,11 +99,11 @@
         else {
             patternCache();
         }
-        
-        
+
+
         /////
-        
-        
+
+
         // templatesCache: Get and set the templates cache object
         /*
             Example usage:
@@ -103,7 +115,7 @@
         */
         function templatesCache(key, value){
             var t;
-        
+
             switch (typeof key){
                 case "string":
                     if (value === undef){
@@ -116,7 +128,7 @@
                         templates[key] = value;
                     }
                 break;
-                
+
                 case "object":
                     for (t in key){
                         if (key.hasOwnProperty(t)){
@@ -124,7 +136,7 @@
                         }
                     }
                 break;
-                
+
                 case "boolean":
                 if (!key){
                     templates = {};
@@ -133,7 +145,7 @@
             }
             return templates;
         }
-        
+
         function extend(obj1, obj2){
             var key;
             for (key in obj2){
@@ -143,16 +155,16 @@
             }
             return obj1;
         }
-        
-        
+
+
         /////
-        
-        
-        // FILTERS    
+
+
+        // FILTERS
         function sortByPriority(a, b){
             return a[1] - b[1];
         }
-        
+
         // Add filter to the stack
         function addFilter(filterName, fn, priority){
             var fns = filters[filterName];
@@ -163,15 +175,15 @@
             fns.sort(sortByPriority);
             return fn;
         }
-        
+
         function applyFilter(filterName, payload){
             var fns = filters[filterName],
                 args, i, len, substituted;
-                
+
             if (fns){
                 args = [payload];
                 i = 2;
-                len = arguments.length;            
+                len = arguments.length;
                 for (; i < len; i++){
                     args.push(arguments[i]);
                 }
@@ -195,7 +207,7 @@
             }
             return payload;
         }
-        
+
         // Router for adding and applying filters, for Tim API
         function filter(filterName, payload){
             return (typeof payload === "function" ? addFilter : applyFilter)
@@ -204,43 +216,88 @@
         filter.stop = function(){
             stopThisFilter = true;
         };
-        
-        
+
+
         /////
-        
-        
+
+
         // Merge data into template
-        /*  
+        /*
             // simpler alternative, without support for iteration:
             template = template.replace(pattern, function(tag, token){
                 return applyFilter("token", token, data, template);
             });
         */
-        // TODO: all an array to be passed to tim(), so that the template is called for each element in it
         function substitute(template, data){
-            var match, tag, token, substituted, startPos, endPos, templateStart, templateEnd, subTemplate, closeToken, closePos, key, loopData, loop;
-        
+            var match, tag, matched, tokens, token, substituted, startPos, endPos, templateStart, templateEnd, subTemplate, closeToken, closePos, key, loopData, loop;
+
+            // Our token may include conditionals, e.g. ${wcmmode.edit || wcmmode.display} so
+            // split into sub-tokens and evaluate.
+            // We'll use eval to evaluate the expressions, but we could possibly also
+            // use an expression parser such as http://jsep.from.so/
+            var re = new RegExp('^(' + patterns.operator + ')?(' + patterns.word + ')+(' + patterns.operator + ')?$');
+
             while((match = pattern.exec(template)) !== null) {
-                token = match[1];
-                substituted = applyFilter("token", token, data, template);
-                startPos = match.index;
-                endPos = pattern.lastIndex;
+                matched       = match[1];
+                startPos      = match.index;
+                endPos        = pattern.lastIndex;
                 templateStart = template.slice(0, startPos);
-                templateEnd = template.slice(endPos);
-                
+                templateEnd   = template.slice(endPos);
+
+            	tokens = matched.match(/([^\s]+)/g);
+            	tokens = tokens.map(function(token){
+
+            		// Ensure we've got a word and not an operator
+            		if (re.test(token)) {
+
+	            		// Deal with prefix / postfix operators, e.g. !stuff++
+	            		var matches = re.exec(token);
+	            		var prefix = (typeof matches[1] == 'undefined' ? '' : matches[1]);
+	            		var token = matches[2];
+	            		var suffix = (typeof matches[3] == 'undefined' ? '' : matches[3]);
+
+		                return prefix + JSON.stringify(applyFilter("token", token, data, template)) + suffix;
+            		} else {
+            			return token;
+            		}
+            	});
+
+            	substituted = eval(tokens.join(' '));
+
                 // If the final value is a function call it and use the returned
                 // value in its place.
                 if (typeof substituted === "function") {
                     substituted = substituted.call(data);
                 }
-                
-                if (typeof substituted !== "boolean" && typeof substituted !== "object"){
+
+                if (typeof substituted === "object"){
+                    substituted = JSON.stringify(substituted);
+                }
+
+                //if (typeof substituted !== "boolean" && typeof substituted !== "object"){
+                if (typeof substituted !== "object"){
                     template = templateStart + substituted + templateEnd;
+
+                    // Determine whether we've got a sly attribute to assign our templated value to
+                    var reg = new RegExp('(data-sly-[\\w]+)\\.([\\w\.]+)=[\'"]');
+                    var parts = reg.exec(templateStart);
+
+                    if (parts) {
+                        // We probably going to want to use our data elsewhere in our template
+                        // - store it against the hash of the template
+                        var hash = window.btoa(template);
+                        localData[hash] = {
+                            'type': parts[1],
+                            'data': {}
+                        }
+                        localData[hash]['data'][parts[2]] = substituted;
+                    }
+
                 } else {
                     subTemplate = "";
                     closeToken = settings.start + "/" + token + settings.end;
                     closePos = templateEnd.indexOf(closeToken);
-                    
+
                     if (closePos >= 0){
                         templateEnd = templateEnd.slice(0, closePos);
                         if (typeof substituted === "boolean") {
@@ -249,7 +306,7 @@
                             for (key in substituted){
                                 if (substituted.hasOwnProperty(key)){
                                     pattern.lastIndex = 0;
-                                
+
                                     // Allow {{_key}} and {{_content}} in templates
                                     loopData = extend({_key:key, _content:substituted[key]}, substituted[key]);
                                     loopData = applyFilter("loopData", loopData, loop, token);
@@ -265,24 +322,25 @@
                         throw "tim: '" + token + "' not closed";
                     }
                 }
-                
+
                 pattern.lastIndex = 0;
+
             }
             return template;
         }
-        
-        
+
+
         // TIM - MAIN FUNCTION
         function tim(template, data){
             var templateLookup;
-        
+
             // On first run, call init plugins
             if (!initialized){
-                initialized = 1;        
+                initialized = 1;
                 applyFilter("init");
             }
             template = applyFilter("templateBefore", template);
-        
+
             // No template tags found in template
             if (template.indexOf(settings.start) < 0){
                 // Is this a key for a cached template?
@@ -292,97 +350,83 @@
                 }
             }
             template = applyFilter("template", template);
-            
+
             // Substitute tokens in template
             if (template && data !== undef){
                 template = substitute(template, data);
             }
-            
+
             template = applyFilter("templateAfter", template);
             return template;
         }
-        
+
         // Get and set settings, e.g. tim({attr:"id"});
         tim.settings = settingsCache;
-        
+
         // Get and set cached templates
         tim.templates = templatesCache;
-        
+
         // Create new Tim function, based on supplied settings, if any
         tim.parser = createTim;
-        
+
         // Add new filters and trigger existing ones. Use tim.filter.stop() during processing, if required.
         tim.filter = filter;
-        
-        
-        /////
-        
-        
+
         // dotSyntax default plugin: uses dot syntax to parse a data object for substitutions
         addFilter("token", function(token, data, tag){
+
             var path = token.split("."),
                 len = path.length,
                 dataLookup = data,
                 i = 0;
 
+            var hash = window.btoa(tag);
+            var dataLocal,
+                typeLocal;
+            if (localData[hash]) {
+                dataLocal = localData[hash]['data'];
+                typeLocal = localData[hash]['type'];
+            }
+
             for (; i < len; i++){
                 dataLookup = dataLookup[path[i]];
-                
+
                 // Property not found
                 if (dataLookup === undef){
-                    throw "tim: '" + path[i] + "' not found" + (i ? " in " + tag : "");
+
+                    // If the property is not in the supplied data array, it may be in the
+                    // data interpolated into our template
+                    if (dataLocal[path[i]]) {
+                        dataLookup = dataLocal[path[i]];
+                        dataLocal = dataLocal[path[i]];
+                    } else if (typeLocal === 'data-sly-list') {
+                        // We have to process the each data element as a list item
+                        var html = '';
+                        JSON.parse(dataLocal).forEach(function(item){
+                            html = html ? html + '</li>\n<li>' : html;
+                            html += item[path[i]];
+                        });
+
+                        dataLookup = html;
+                    } else {
+                        throw "tim: '" + path[i] + "' not found" + (i ? " in " + tag : "");
+                    }
                 }
-                
+
                 // Return the required value
                 if (i === len - 1){
                     return dataLookup;
                 }
             }
+
         });
-        
-        
-        /////
-        
-        
-        // Dom plugin: finds micro-templates in <script>'s in the DOM
-        // This block of code can be removed if unneeded - e.g. with server-side JS
-        // Default: <script type="text/tim" class="foo">{{TEMPLATE}}</script>
-        if (window && window.document){
-            tim.dom = function(domSettings){
-                domSettings = domSettings || {};
-                
-                var type = domSettings.type || settings.type || "text/tim",
-                    attr = domSettings.attr || settings.attr || "class",
-                    document = window.document,
-                    hasQuery = !!document.querySelectorAll,
-                    elements = hasQuery ?
-                        document.querySelectorAll(
-                            "script[type='" + type + "']"
-                        ) :
-                        document.getElementsByTagName("script"),
-                    i = 0,
-                    len = elements.length,
-                    elem, key,
-                    templatesInDom = {};
-                    
-                for (; i < len; i++){
-                    elem = elements[i];
-                    // Cannot access "class" using el.getAttribute()
-                    key = attr === "class" ? elem.className : elem.getAttribute(attr);
-                    if (key && (hasQuery || elem.type === type)){
-                        templatesInDom[key] = elem.innerHTML;
-                    }
-                }
-                
-                templatesCache(templatesInDom);
-                return templatesInDom;
-            };
-            
-            addFilter("init", function(){
-                tim.dom();
-            });
-        }
-        
+
+        addFilter("templateAfter", function(template){
+            // Replace innerHTML as directed by data-sly-text attributes
+            template = template.replace(/(data-sly-text=['"]([^'"]*)['"][^>]*>)([^<]*)/g, "$1$2");
+            return template;
+        });
+
         return tim;
     }());
 

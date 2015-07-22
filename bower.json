@@ -13,8 +13,6 @@
     "tests"
   ],
   "dependencies": {
-    "tim": "git+https://github.com/premasagar/tim.git",
-    "jquery": "~2.1.4",
     "jasmine": "~2.3.4"
   }
 }
